@@ -38,6 +38,11 @@ pub struct Paragraph {
     /// Set when this paragraph ends a section (OOXML keeps `w:sectPr` on the last paragraph).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub section: Option<Box<SectionProps>>,
+    /// Set when the file marks a page as having started in this paragraph when it was last laid
+    /// out by the application that saved it (OOXML `w:lastRenderedPageBreak`). A record of that
+    /// application's pagination, not a break: layout ignores it, and it is not part of equality.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub rendered_page_break: bool,
     /// Change counter for caches (not part of equality).
     #[serde(skip, default = "next_rev")]
     pub rev: u64,
@@ -69,6 +74,7 @@ impl Paragraph {
             mark: CharProps::default(),
             objects: Vec::new(),
             section: None,
+            rendered_page_break: false,
             rev: next_rev(),
         }
     }
@@ -468,6 +474,7 @@ impl Paragraph {
             mark: if self.text.is_empty() && off == 0 { self.mark.clone() } else { carry },
             objects: tail_objs,
             section: self.section.take(),
+            rendered_page_break: false,
             rev: next_rev(),
         };
         if tail.text.is_empty() {
@@ -479,9 +486,11 @@ impl Paragraph {
         Ok(tail)
     }
 
-    /// Append `other`'s content (its paragraph properties are dropped; its section break kept).
+    /// Append `other`'s content (its paragraph properties are dropped; its section break and
+    /// rendered page start kept).
     pub fn append(&mut self, other: Paragraph) {
-        let Paragraph { text, runs, objects, section, .. } = other;
+        let Paragraph { text, runs, objects, section, rendered_page_break, .. } = other;
+        self.rendered_page_break |= rendered_page_break;
         self.text.push_str(&text);
         self.runs.extend(runs);
         self.objects.extend(objects);

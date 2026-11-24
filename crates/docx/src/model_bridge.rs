@@ -53,9 +53,10 @@ fn paragraph_value_from_shared(
     source: craft_wordmodel::para::Paragraph,
     graphics: &mut GraphicCache,
 ) -> Result<wordcraft_doc::para::Paragraph, DocxError> {
-    let craft_wordmodel::para::Paragraph { text, runs, props, mark, objects, section, .. } = source;
+    let craft_wordmodel::para::Paragraph { text, runs, props, mark, objects, section, rendered_page_break, .. } = source;
     let mut paragraph = wordcraft_doc::para::Paragraph::new();
     paragraph.text = text;
+    paragraph.rendered_page_break = rendered_page_break;
     paragraph.runs =
         runs.into_iter().map(|run| Ok(wordcraft_doc::para::Run { len: run.len, props: convert(run.props)? })).collect::<Result<_, DocxError>>()?;
     paragraph.props = convert(props)?;
@@ -280,6 +281,7 @@ fn sanitize_char_props(mut props: wordcraft_doc::CharProps) -> wordcraft_doc::Ch
 fn paragraph_value_to_shared(source: &wordcraft_doc::para::Paragraph) -> Result<craft_wordmodel::para::Paragraph, DocxError> {
     let mut paragraph = craft_wordmodel::para::Paragraph::new();
     paragraph.text = source.text.clone();
+    paragraph.rendered_page_break = source.rendered_page_break;
     paragraph.runs = source
         .runs
         .iter()
