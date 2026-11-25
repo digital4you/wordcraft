@@ -167,10 +167,17 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
                     let comments = tl!("Comments");
                     let share_w = ui.ctx().fonts_mut(|f| f.layout_no_wrap(share.to_string(), medium(12.0), t.text).size().x);
                     let spaced = |w: f32| w + 2.0;
+                    let host_share = app.ui.host_share;
                     let button_widths = |level: usize| -> f32 {
                         let labels = level == 0;
                         let share_full = (share_w + 36.0).max(74.0);
-                        let share_button = if level < 2 { share_full } else { 30.0 };
+                        let share_button = if !host_share {
+                            -8.0
+                        } else if level < 2 {
+                            share_full
+                        } else {
+                            30.0
+                        };
                         let editing = crate::widgets::icon_text_button_width(ui, editing_label, regular(12.0), true, labels);
                         let comment = crate::widgets::icon_text_button_width(ui, comments, regular(12.0), false, labels);
                         // The gaps (6 + 4 + 8) and the strip's margin.
@@ -188,40 +195,45 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
                             contextual: !custom && wordcraft_engine::ribbon::CONTEXTUAL_TABS.contains(&tab.as_str()),
                         })
                         .collect();
-                    let plan = plan_strip(&specs, button_levels, ui.available_width(), MORE_TABS_W + 2.0);
+                    // Without the title bar (a host page's own), Save, Undo and Redo lead the strip.
+                    let strip_qat = !app.ui.host_title_bar && app.ui.quick_access_toolbar;
+                    let qat_w = if strip_qat { crate::chrome::quick_access_strip_width(app) + 8.0 } else { 0.0 };
+                    let plan = plan_strip(&specs, button_levels, ui.available_width() - qat_w, MORE_TABS_W + 2.0);
                     ui.with_layout(crate::rtl::far_side(ui, egui::Align::Center), |ui| {
                         // No document open (#1129): nothing to share, edit or comment on — but only
                         // these buttons. Disabling the whole line took the tab strip with it: the
                         // tabs took clicks that did nothing, so the empty window had no way back to
                         // the Start screen (#3045).
                         ui.add_enabled_ui(app.has_document(), |ui| {
-                            let (share_size, share_text) =
-                                if plan.buttons < 2 { (((share_w + 36.0).max(74.0), 24.0), true) } else { ((30.0, 24.0), false) };
-                            let (r, resp) = ui.allocate_exact_size(vec2(share_size.0, share_size.1), Sense::click());
-                            ui.painter().rect_filled(r, 4.0, if resp.hovered() { t.accent_text } else { t.accent });
-                            let rtl = crate::rtl::on();
-                            let icon_x = if share_text { crate::rtl::lead_x(rtl, r, 14.0) } else { r.center().x };
-                            icons::paint(
-                                ui.painter(),
-                                Rect::from_center_size(pos2(icon_x, r.center().y), vec2(14.0, 14.0)),
-                                "share",
-                                t.on_accent,
-                                t.on_accent,
-                            );
-                            if share_text {
-                                ui.painter().text(
-                                    pos2(crate::rtl::lead_x(rtl, r, 26.0), r.center().y),
-                                    crate::rtl::lead_center(rtl),
-                                    share,
-                                    medium(12.0),
+                            if host_share {
+                                let (share_size, share_text) =
+                                    if plan.buttons < 2 { (((share_w + 36.0).max(74.0), 24.0), true) } else { ((30.0, 24.0), false) };
+                                let (r, resp) = ui.allocate_exact_size(vec2(share_size.0, share_size.1), Sense::click());
+                                ui.painter().rect_filled(r, 4.0, if resp.hovered() { t.accent_text } else { t.accent });
+                                let rtl = crate::rtl::on();
+                                let icon_x = if share_text { crate::rtl::lead_x(rtl, r, 14.0) } else { r.center().x };
+                                icons::paint(
+                                    ui.painter(),
+                                    Rect::from_center_size(pos2(icon_x, r.center().y), vec2(14.0, 14.0)),
+                                    "share",
+                                    t.on_accent,
                                     t.on_accent,
                                 );
+                                if share_text {
+                                    ui.painter().text(
+                                        pos2(crate::rtl::lead_x(rtl, r, 26.0), r.center().y),
+                                        crate::rtl::lead_center(rtl),
+                                        share,
+                                        medium(12.0),
+                                        t.on_accent,
+                                    );
+                                }
+                                resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, share));
+                                if resp.on_hover_text(tl!("Export a copy to share (PDF, Word document)")).clicked() {
+                                    let _ = app.run("ui.backstage", json!({"value": true, "page": "export"}));
+                                }
+                                ui.add_space(6.0);
                             }
-                            resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, share));
-                            if resp.on_hover_text(tl!("Export a copy to share (PDF, Word document)")).clicked() {
-                                let _ = app.run("ui.backstage", json!({"value": true, "page": "export"}));
-                            }
-                            ui.add_space(6.0);
                             let track = app.session.doc.settings.track_changes;
                             let mode = if plan.buttons == 0 {
                                 crate::widgets::icon_text_menu_button(ui, "pencil", editing_label, regular(12.0))
@@ -257,6 +269,10 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
                             egui::Layout::left_to_right(egui::Align::Center)
                         };
                         ui.with_layout(tabs_layout, |ui| {
+                            if strip_qat {
+                                crate::chrome::quick_access_in_strip(ui, app);
+                                ui.add_space(8.0);
+                            }
                             // The tabs that don't fit go into a » menu at the end of the strip (#897, #2026).
                             for (i, ((tab, custom), _)) in tabs
                                 .iter()

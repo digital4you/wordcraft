@@ -276,6 +276,8 @@ impl WordApp {
             status_count: _,
             nav_pane: _,
             show_discord: _,
+            host_title_bar: _,
+            host_share: _,
             author: _,
             window: _,
             language: _,

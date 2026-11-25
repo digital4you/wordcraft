@@ -277,6 +277,22 @@ impl WordApp {
             .is_some_and(|e| e.eq_ignore_ascii_case("doc") || e.eq_ignore_ascii_case("dot"))
     }
 
+    /// The document as Save would write it, without saving (`document.snapshot` in the control
+    /// API): a host page keeps it as its own draft of the unsaved changes. Nothing changes: not the
+    /// unsaved flag, the revision, the file name, the undo history or what the host page has saved.
+    pub(crate) fn snapshot(&self) -> Result<serde_json::Value, String> {
+        let name = self.web_save_name("file.save");
+        let password = self.session.password.as_ref().map(wordcraft_engine::Password::as_str);
+        let opts = wordcraft_engine::cmd::file::export_options(&self.session, &serde_json::json!({}));
+        let bytes = wordcraft_engine::io::save_bytes_with(&name, &self.session.doc, password, &opts)?;
+        Ok(serde_json::json!({
+            "name": name,
+            "dirty": self.session.dirty,
+            "bytes": bytes.len(),
+            "data": wordcraft_engine::cmd::insert::base64_encode(&bytes),
+        }))
+    }
+
     /// The name a browser Save or Export without a name uses. An export is named after the
     /// document (`report.pdf`, not `report.docx.pdf`). A host page that keeps the files
     /// ([`Services::host_save`]) gets Save back under the opened file's own name and format, as

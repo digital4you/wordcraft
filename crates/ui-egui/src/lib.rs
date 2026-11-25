@@ -346,6 +346,15 @@ pub struct UiState {
     #[serde(skip)]
     pub nav_collapsed: std::collections::HashSet<wordcraft_doc::Path>,
     pub show_discord: bool,
+    /// A host page that frames the app shows its own title and file handling (`?chrome=notitlebar`
+    /// on the web): no title bar, and Save, Undo and Redo move to the start of the tab strip. Set
+    /// by the host for this visit, never saved.
+    #[serde(skip)]
+    pub host_title_bar: bool,
+    /// A host page that shares documents itself hides the tab strip's Share button (`?chrome=noshare`
+    /// on the web). Set by the host for this visit, never saved.
+    #[serde(skip)]
+    pub host_share: bool,
     /// User name (File › Options) for comments and tracked changes. `None` (no saved name) keeps
     /// the default; a saved empty name stays empty (#4368).
     pub author: Option<String>,
@@ -481,6 +490,8 @@ impl Default for UiState {
             pane_order: Vec::new(),
             nav_collapsed: Default::default(),
             show_discord: true,
+            host_title_bar: true,
+            host_share: true,
             author: None,
             window: None,
             language: i18n::AUTO.into(),

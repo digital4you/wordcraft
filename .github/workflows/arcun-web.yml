@@ -1,0 +1,77 @@
+name: Arcun web bundle
+
+# WordCraft's web bundle with the Arcun patches of this branch (ARCUN.md), published as a release
+# asset that Arcun pins by URL and sha256 (arcun-app/definitions/craftApps.lock.json). The package
+# is the official release's web bundle with only the built files replaced, so licences and notices
+# stay exactly as upstream ships them.
+on:
+  push:
+    tags: ['v*-arcun.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to build and publish (for example v0.18.1-arcun.1)
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      # The craft-fonts commit upstream's release of this version embeds (release.yml craft-fonts-ref).
+      CRAFT_FONTS_REF: b076417b5880bd4154bd22f00695b1d28c6bea83
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+          path: wordcraft
+
+      - name: Check out craft-i18n and craft-fonts at the pinned commits
+        run: |
+          git clone --quiet --filter=blob:none https://github.com/storytold/craft-i18n.git craft-i18n
+          git -C craft-i18n checkout --quiet "$(cat wordcraft/craft-i18n.rev)"
+          git clone --quiet --filter=blob:none https://github.com/storytold/craft-fonts.git craft-fonts
+          git -C craft-fonts checkout --quiet "$CRAFT_FONTS_REF"
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.100.0
+          targets: wasm32-unknown-unknown
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: trunk@0.22.2
+
+      - name: Build the web app
+        working-directory: wordcraft/apps/wordcraft-web
+        env:
+          CRAFT_FONTS_DIR: ${{ github.workspace }}/craft-fonts
+          CRAFT_I18N_DIR: ${{ github.workspace }}/craft-i18n
+          CRAFT_I18N_REQUIRED: '1'
+        run: trunk build --release
+
+      - name: Package on the official web bundle
+        run: |
+          version="${TAG#v}"
+          base="${version%%-arcun.*}"
+          name="wordcraft-web-${version}"
+          curl --silent --show-error --fail --location --output official.zip \
+            "https://github.com/storytold/wordcraft/releases/download/v${base}/wordcraft-web-${base}.zip"
+          unzip -q official.zip
+          mv "wordcraft-web-${base}" "$name"
+          rm -rf "$name"/index.html "$name"/wordcraft-web-*.js "$name"/wordcraft-web-*_bg.wasm "$name"/snippets
+          cp -R wordcraft/dist/web/index.html wordcraft/dist/web/wordcraft-web-*.js wordcraft/dist/web/wordcraft-web-*_bg.wasm wordcraft/dist/web/snippets "$name"/
+          cp wordcraft/ARCUN.md "$name"/ARCUN.md
+          zip -q -r -X "$name.zip" "$name"
+          sha256sum "$name.zip" | tee "$name.zip.sha256"
+          echo "ASSET=$name.zip" >> "$GITHUB_ENV"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$TAG" "$ASSET" "$ASSET.sha256" --repo "$GITHUB_REPOSITORY" --title "$TAG" \
+            --notes "WordCraft ${TAG#v} for Arcun: the official web bundle of the base release with the patches in ARCUN.md. sha256: $(cut -d' ' -f1 "$ASSET.sha256")"

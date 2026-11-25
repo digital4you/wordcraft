@@ -270,6 +270,12 @@ pub fn handle(app: &mut WordApp, ctx: &egui::Context, req: &ControlRequest) -> O
             Ok(v) => ok(v),
             Err(e) => err(e),
         },
+        // The document as Save would write it, without saving: for a host page's own drafts.
+        "document.snapshot" if !app.has_document() => err(NO_DOCUMENT),
+        "document.snapshot" => match app.snapshot() {
+            Ok(v) => ok(v),
+            Err(e) => err(e),
+        },
         "ui.inspect" => ok(inspect(app, ctx)),
         "ui.parity" => ok(wordcraft_engine::catalog::parity(&app.session.registry)),
         "ui.click" => {

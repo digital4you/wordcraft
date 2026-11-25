@@ -104,6 +104,15 @@ pub fn start() {
                         crate::host::Bridge::set_author(&mut app, &author);
                         prefs.keep_own_author(&app.session.author, &own);
                     }
+                    // A host page with its own title and sharing hides ours (`?chrome=notitlebar,noshare`):
+                    // Save, Undo and Redo then lead the tab strip. Only for this visit, never stored.
+                    if app_bridge.is_some()
+                        && let Some(chrome) = query_param("chrome")
+                    {
+                        let parts: Vec<&str> = chrome.split(',').map(str::trim).collect();
+                        app.ui.host_title_bar = !parts.contains(&"notitlebar");
+                        app.ui.host_share = !parts.contains(&"noshare");
+                    }
                     Ok(Box::new(WebShell { app, inbox, messages, prefs }))
                 }),
             )

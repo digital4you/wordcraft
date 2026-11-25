@@ -4932,6 +4932,23 @@ fn host_open(a: &mut WordApp, name: &str) {
     assert!(a.session.dirty);
 }
 
+/// A host page's draft (`document.snapshot`) is the document as Save would write it, with the
+/// unsaved changes in it, and saves nothing: the document stays unsaved and the page gets no file.
+#[test]
+fn snapshot_is_the_document_as_saved_without_saving() {
+    let (mut a, got) = host_app(false);
+    host_open(&mut a, "report.docx");
+    let snap = a.snapshot().unwrap();
+    assert!(a.session.dirty);
+    assert!(got.borrow().is_empty());
+    assert_eq!(snap["name"], "report.docx");
+    let data = snap["data"].as_str().unwrap();
+    let mut b = typed();
+    b.execute("file.open", json!({"path": "draft.docx", "data": data})).unwrap();
+    let text = b.session.run("document.text", &json!({})).unwrap().to_string();
+    assert!(text.contains("Edited"), "the draft holds the unsaved edit: {text}");
+}
+
 /// Save hands the opened file back under its own name and format; Save As says so and
 /// becomes the file the next Save writes.
 #[test]

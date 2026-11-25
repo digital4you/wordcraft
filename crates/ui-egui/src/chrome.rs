@@ -60,9 +60,24 @@ pub(crate) fn qat_enabled(app: &WordApp, id: &str) -> bool {
     }
 }
 
+/// The Quick Access Toolbar's width at the start of the tab strip ([`quick_access_in_strip`]):
+/// its buttons and the Undo button's drop-down arrow, with the strip's item spacing.
+pub(crate) fn quick_access_strip_width(app: &WordApp) -> f32 {
+    let ids = app.session.ribbon.qat();
+    let arrows = ids.iter().filter(|id| **id == "edit.undo").count();
+    (ids.len() as f32) * 28.0 + (arrows as f32) * 14.0
+}
+
+/// The Quick Access Toolbar at the start of the tab strip when a host page hides the title bar
+/// (`host_title_bar`): the same buttons, without the menu that customizes it, which offers commands
+/// the host handles itself (New, Open).
+pub(crate) fn quick_access_in_strip(ui: &mut Ui, app: &mut WordApp) {
+    quick_access(ui, app, false);
+}
+
 /// The Quick Access Toolbar (#379): the user's commands (Save, Undo, Redo until customized), each
 /// with a right-click menu, then the menu button that customizes it (#376).
-fn quick_access(ui: &mut Ui, app: &mut WordApp) {
+fn quick_access(ui: &mut Ui, app: &mut WordApp, with_menu: bool) {
     let ids: Vec<String> = app.session.ribbon.qat().into_iter().map(str::to_string).collect();
     for (index, id) in ids.iter().enumerate() {
         let id = id.as_str();
@@ -84,6 +99,9 @@ fn quick_access(ui: &mut Ui, app: &mut WordApp) {
         if id == "edit.undo" {
             undo_list_button(ui, app, enabled);
         }
+    }
+    if !with_menu {
+        return;
     }
     let t = Tokens::get(ui.ctx());
     let (r, _) = ui.allocate_exact_size(vec2(26.0, 24.0), Sense::hover());
@@ -376,7 +394,7 @@ pub fn title_bar(app: &mut WordApp, ui: &mut Ui) {
                     ui.add_space(8.0);
                     // Hidden (#1945): neither the buttons nor the … menu; the title centres as before.
                     if app.ui.quick_access_toolbar {
-                        quick_access(ui, app);
+                        quick_access(ui, app, true);
                     }
                     qat_end = if rtl { ui.min_rect().min.x } else { ui.min_rect().max.x };
                     ui.with_layout(crate::rtl::far_side(ui, egui::Align::Center), |ui| {
