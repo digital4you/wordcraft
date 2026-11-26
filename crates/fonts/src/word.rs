@@ -259,7 +259,8 @@ fn original_line_units(family: &str) -> Option<(f64, f64, f64, f64)> {
     let (a, d, g, upem): (i32, i32, i32, i32) = match lower.as_str() {
         "segoe ui" | "segoe ui semibold" | "segoe ui light" | "segoe ui semilight" => (2210, 514, 0, 2048),
         "georgia" => (1878, 449, 0, 2048),
-        "palatino linotype" => (1499, 582, 682, 2048),
+        // Windows draws "Palatino" (the Mac name) in Palatino Linotype.
+        "palatino linotype" | "palatino" => (1499, 582, 682, 2048),
         "book antiqua" => (1891, 578, 0, 2048),
         "century" => (2019, 443, 0, 2048),
         "century gothic" => (2060, 451, 0, 2048),
