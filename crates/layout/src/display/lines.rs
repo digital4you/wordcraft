@@ -46,15 +46,34 @@ struct LineContext<'a, 'authors, 'author_doc> {
     alpha: f32,
     down: bool,
     auto: Option<Rgb>,
+    /// What the paragraph's text sits on: its own shading, else the shading of the innermost
+    /// table cell holding it. Automatic text on a dark one is white.
+    behind: Option<Rgb>,
 }
 
 impl LineContext<'_, '_, '_> {
     fn ink(&self, color: &TextColor, background: Option<Rgb>) -> Rgb {
         match (color, self.auto) {
             (TextColor::Auto, Some(rgb)) => rgb,
-            _ => text_color(color, background),
+            _ => text_color(color, background.or(self.behind)),
         }
     }
+}
+
+/// The paragraph's shading, else that of the innermost table cell (or table) around it with one.
+fn shading_behind(doc: &Document, story: StoryRef, path: &Path, pl: &ParaLayout) -> Option<Rgb> {
+    if let Some(s) = pl.rp.shading {
+        return Some(s);
+    }
+    let mut at = path.clone();
+    while let Some((table, row, cell)) = at.cell() {
+        let t = doc.table(story, &table)?;
+        if let Some(s) = t.rows.get(row).and_then(|r| r.cells.get(cell)).and_then(|c| c.props.shading).or(t.props.shading) {
+            return Some(s);
+        }
+        at = table;
+    }
+    None
 }
 
 pub(super) fn lines(input: LineRender<'_, '_, '_>, out: &mut Vec<Draw>) {
@@ -67,12 +86,13 @@ pub(super) fn lines(input: LineRender<'_, '_, '_>, out: &mut Vec<Draw>) {
         StoryRef::Part(id) => doc.parts.get(&id).and_then(|p| p.body.auto_color),
         StoryRef::Body => None,
     };
+    let behind = shading_behind(doc, story, path, pl);
     for li in l0..l1 {
         let Some(line) = pl.lines.get(li) else { continue };
         let top = y + (line.top - first.top);
         let base = top + (line.baseline - line.top);
         let bottom = top + line.height;
-        let ctx = LineContext { doc, story, path, pl, para, line, li, x, top, base, bottom, opts, authors, alpha, down, auto };
+        let ctx = LineContext { doc, story, path, pl, para, line, li, x, top, base, bottom, opts, authors, alpha, down, auto, behind };
         comment_backgrounds(&ctx, out);
         character_backgrounds(&ctx, out);
         draw_label_and_hyphen(&ctx, out);
