@@ -140,6 +140,9 @@ fn substitutes_by_name(family: &str) -> (&'static [&'static str], bool) {
         "Source Serif 4",
     ];
     let f = family.to_ascii_lowercase();
+    if let Some(subs) = office_font_substitutes(family.trim(), f.trim()) {
+        return (subs, true);
+    }
     if is_thai_serif(&f) {
         return (THAI_SERIF, true);
     }
@@ -171,6 +174,138 @@ fn substitutes_by_name(family: &str) -> (&'static [&'static str], bool) {
         _ if f.contains("serif") && !f.contains("sans") => (SERIF, false),
         _ => (SANS, false),
     }
+}
+
+/// Substitutes for fonts Windows and Office install, picked by their advance widths (measured
+/// against the widths Word writes into its PDFs): metric-compatible clones where one exists
+/// (Selawik for Segoe UI, Gelasio for Georgia, Liberation Sans Narrow for Arial Narrow, the TeX
+/// Gyre faces for Century, Century Gothic and Book Antiqua, the IPA fonts for the MS Japanese
+/// fonts), else the open face whose widths come closest (DejaVu Sans Condensed for Tahoma, within
+/// 2%; DejaVu Sans for Verdana, 1%; Noto CJK for the Chinese and Japanese UI fonts; the CJK Mono
+/// faces for SimSun and MingLiU, whose Latin letters are half an em wide). Then the generic list.
+/// `family` as written (localized names keep their full-width letters), `lower` in ASCII lower
+/// case. Their line heights are the originals' ([`original_line`]).
+fn office_font_substitutes(family: &str, lower: &str) -> Option<&'static [&'static str]> {
+    const SEGOE: &[&str] = &["Selawik", "Carlito", "Liberation Sans", "Noto Sans", "DejaVu Sans"];
+    const SEGOE_SEMIBOLD: &[&str] = &["Selawik Semibold", "Selawik", "Carlito", "Liberation Sans", "DejaVu Sans"];
+    const SEGOE_LIGHT: &[&str] = &["Selawik Light", "Selawik", "Carlito", "Liberation Sans", "DejaVu Sans"];
+    const SEGOE_SEMILIGHT: &[&str] = &["Selawik Semilight", "Selawik", "Carlito", "Liberation Sans", "DejaVu Sans"];
+    const GEORGIA: &[&str] = &["Gelasio", "Caladea", "Liberation Serif", "Noto Serif", "DejaVu Serif"];
+    const CENTURY: &[&str] = &["TeX Gyre Schola", "C059", "Century Schoolbook L", "Caladea", "Liberation Serif", "DejaVu Serif"];
+    const CENTURY_GOTHIC: &[&str] = &["TeX Gyre Adventor", "URW Gothic", "URW Gothic L", "DejaVu Sans", "Liberation Sans"];
+    const ARIAL_NARROW: &[&str] = &["Liberation Sans Narrow", "Nimbus Sans Narrow", "DejaVu Sans Condensed", "Liberation Sans"];
+    const TAHOMA: &[&str] = &["DejaVu Sans Condensed", "DejaVu Sans", "Noto Sans", "Liberation Sans"];
+    const VERDANA: &[&str] = &["DejaVu Sans", "Noto Sans", "Liberation Sans"];
+    // Trebuchet MS and Aptos: Selawik is within 3% (Carlito is 5–10% narrower).
+    const HUMANIST_SANS: &[&str] = &["Selawik", "DejaVu Sans Condensed", "Carlito", "Liberation Sans"];
+    const UNIVERS: &[&str] = &["Noto Sans", "Liberation Sans", "DejaVu Sans Condensed", "Carlito"];
+    const MS_SANS_SERIF: &[&str] = &["Liberation Sans", "Arimo", "Helvetica", "DejaVu Sans"];
+    const LUCIDA_SANS: &[&str] = &["DejaVu Sans", "Noto Sans", "Liberation Sans"];
+    const MS_MINCHO: &[&str] = &["IPAMincho", "Noto Sans Mono CJK JP", "Noto Serif CJK JP"];
+    const MS_GOTHIC: &[&str] = &["IPAGothic", "Noto Sans Mono CJK JP", "Noto Sans CJK JP"];
+    const MS_PMINCHO: &[&str] = &["IPAPMincho", "Noto Serif CJK JP", "IPAMincho"];
+    const MS_PGOTHIC: &[&str] = &["IPAPGothic", "Noto Sans CJK JP", "IPAGothic"];
+    const JAPANESE_UI: &[&str] = &["Noto Sans CJK JP", "IPAPGothic"];
+    const SIMSUN: &[&str] = &["Noto Sans Mono CJK SC", "AR PL UMing CN", "Noto Serif CJK SC"];
+    const YAHEI: &[&str] = &["Noto Sans CJK SC", "Noto Serif CJK SC"];
+    const MINGLIU: &[&str] = &["Noto Sans Mono CJK TC", "AR PL UMing TW", "Noto Serif CJK TC"];
+    const PMINGLIU: &[&str] = &["Noto Serif CJK TC", "AR PL UMing TW", "Noto Sans CJK TC"];
+    Some(match lower {
+        "segoe ui" => SEGOE,
+        "segoe ui semibold" => SEGOE_SEMIBOLD,
+        "segoe ui light" => SEGOE_LIGHT,
+        "segoe ui semilight" => SEGOE_SEMILIGHT,
+        "georgia" => GEORGIA,
+        "century" | "century schoolbook" => CENTURY,
+        "century gothic" => CENTURY_GOTHIC,
+        "arial narrow" => ARIAL_NARROW,
+        "tahoma" => TAHOMA,
+        "verdana" => VERDANA,
+        "trebuchet ms" | "aptos" => HUMANIST_SANS,
+        "univers" => UNIVERS,
+        "microsoft sans serif" | "ms sans serif" => MS_SANS_SERIF,
+        "lucida sans unicode" | "lucida sans" => LUCIDA_SANS,
+        "ms mincho" => MS_MINCHO,
+        "ms gothic" => MS_GOTHIC,
+        "ms pmincho" => MS_PMINCHO,
+        "ms pgothic" | "ms ui gothic" => MS_PGOTHIC,
+        "yu gothic" | "yu gothic light" | "yu gothic medium" | "meiryo" | "meiryo ui" => JAPANESE_UI,
+        "simsun" | "nsimsun" => SIMSUN,
+        "microsoft yahei" => YAHEI,
+        "mingliu" => MINGLIU,
+        "pmingliu" => PMINGLIU,
+        _ => match family {
+            "ＭＳ 明朝" => MS_MINCHO,
+            "ＭＳ ゴシック" => MS_GOTHIC,
+            "ＭＳ Ｐ明朝" => MS_PMINCHO,
+            "ＭＳ Ｐゴシック" | "ＭＳ ＵＩゴシック" => MS_PGOTHIC,
+            "游ゴシック" | "游ゴシック Light" | "游ゴシック Medium" | "メイリオ" => JAPANESE_UI,
+            "宋体" | "新宋体" => SIMSUN,
+            "微软雅黑" => YAHEI,
+            "細明體" => MINGLIU,
+            "新細明體" => PMINGLIU,
+            _ => return None,
+        },
+    })
+}
+
+/// The line (ascender, descender, line gap, units per em) of fonts Windows and Office install, as
+/// their hhea tables give it (read from the subsets Word embeds in its PDFs). Word spaces lines by
+/// the font itself, so a run in one of them takes this height whatever face draws it: the clones'
+/// own heights differ (Selawik's is 10% less than Segoe UI's, TeX Gyre Pagella's a quarter less
+/// than Palatino Linotype's).
+fn original_line_units(family: &str) -> Option<(f64, f64, f64, f64)> {
+    let lower = family.trim().to_ascii_lowercase();
+    let (a, d, g, upem): (i32, i32, i32, i32) = match lower.as_str() {
+        "segoe ui" | "segoe ui semibold" | "segoe ui light" | "segoe ui semilight" => (2210, 514, 0, 2048),
+        "georgia" => (1878, 449, 0, 2048),
+        "palatino linotype" => (1499, 582, 682, 2048),
+        "book antiqua" => (1891, 578, 0, 2048),
+        "century" => (2019, 443, 0, 2048),
+        "century gothic" => (2060, 451, 0, 2048),
+        "arial narrow" => (1916, 434, 0, 2048),
+        "tahoma" => (2049, 423, 0, 2048),
+        "verdana" => (2059, 430, 0, 2048),
+        "trebuchet ms" => (1923, 455, 0, 2048),
+        "aptos" => (1923, 577, 0, 2048),
+        "univers" => (2025, 512, 0, 2048),
+        "garamond" => (1765, 539, 0, 2048),
+        "calisto mt" => (1894, 470, 0, 2048),
+        "microsoft sans serif" => (1888, 430, 0, 2048),
+        "lucida sans unicode" => (2246, 901, 0, 2048),
+        "ms mincho" | "ms gothic" | "ms pmincho" | "ms pgothic" | "ms ui gothic" => (220, 36, 0, 256),
+        "simsun" => (220, 36, 36, 256),
+        "mingliu" | "pmingliu" => (820, 204, 204, 1024),
+        "yu gothic" => (1802, 455, 1024, 2048),
+        "meiryo" => (2171, 901, 0, 2048),
+        "meiryo ui" => (2171, 430, 0, 2048),
+        "microsoft yahei" => (2167, 536, 0, 2048),
+        _ => match family.trim() {
+            "ＭＳ 明朝" | "ＭＳ ゴシック" | "ＭＳ Ｐ明朝" | "ＭＳ Ｐゴシック" | "ＭＳ ＵＩゴシック" => {
+                (220, 36, 0, 256)
+            }
+            "宋体" => (220, 36, 36, 256),
+            "細明體" | "新細明體" => (820, 204, 204, 1024),
+            "游ゴシック" => (1802, 455, 1024, 2048),
+            "メイリオ" => (2171, 901, 0, 2048),
+            "微软雅黑" => (2167, 536, 0, 2048),
+            _ => return None,
+        },
+    };
+    Some((f64::from(a), f64::from(d), f64::from(g), f64::from(upem)))
+}
+
+/// The (ascent, descent) in em Word gives a line with a run in `family` when `family` isn't
+/// installed and is one of the Windows and Office fonts whose line height is known
+/// ([`original_line_units`]); the line gap goes above the ascent, as [`line_metrics`] puts it. The
+/// first entry of a fallback list counts.
+pub fn original_line(family: &str, resolved: &Resolved) -> Option<(f64, f64)> {
+    if !resolved.substituted {
+        return None;
+    }
+    let first = family.split(';').map(str::trim).find(|f| !f.is_empty())?;
+    let (a, d, g, upem) = original_line_units(charset_base_family(first))?;
+    Some(((a + g) / upem, d / upem))
 }
 
 /// Ascent and descent (em) of Word's symbol fonts, which aren't open fonts. Their characters are
@@ -229,11 +364,14 @@ pub fn has_installed_substitute(family: &str) -> bool {
     has_own_substitutes(base) && substitute(FontDb::global(), base).is_some()
 }
 
-/// Fonts made to measure alike (the same advance widths and line height), so text drawn in one
-/// wraps and paginates as in the others: Carlito for Calibri, Caladea for Cambria, Liberation and
+/// Fonts made to measure alike (the same advance widths; where their line heights differ,
+/// [`original_line`] gives the Windows font's), so text drawn in one wraps and paginates as in
+/// the others: Carlito for Calibri, Caladea for Cambria, Liberation and
 /// Croscore fonts for Arial, Times New Roman and Courier New, the Palatino look-alikes for Palatino
-/// Linotype and Book Antiqua, and Arial and Helvetica (drawn to Helvetica's widths) for one
-/// another. The one list of them: a missing font is drawn in its first installed twin
+/// Linotype and Book Antiqua, Arial and Helvetica (drawn to Helvetica's widths) for one another,
+/// Liberation Sans Narrow for Arial Narrow, Selawik for Segoe UI, Gelasio for Georgia, TeX Gyre
+/// Schola for Century and Century Schoolbook, TeX Gyre Adventor for Century Gothic, and the IPA
+/// fonts for MS Mincho and MS Gothic. The one list of them: a missing font is drawn in its first installed twin
 /// ([`substitute`]), and text drawn in a twin doesn't change the layout ([`metric_compatible`]).
 /// Not macOS Times or Courier: their advance widths differ from Times New Roman's and Courier
 /// New's.
@@ -244,6 +382,13 @@ const METRIC_TWINS: &[&[&str]] = &[
     &["Calibri", "Carlito"],
     &["Cambria", "Caladea"],
     &["Palatino Linotype", "Palatino", "Book Antiqua", "TeX Gyre Pagella", "P052", "URW Palladio L", "Palladio"],
+    &["Arial Narrow", "Liberation Sans Narrow", "Nimbus Sans Narrow"],
+    &["Segoe UI", "Selawik"],
+    &["Georgia", "Gelasio"],
+    &["Century Schoolbook", "Century", "TeX Gyre Schola", "C059", "Century Schoolbook L"],
+    &["Century Gothic", "TeX Gyre Adventor", "URW Gothic", "URW Gothic L"],
+    &["MS Mincho", "IPAMincho"],
+    &["MS Gothic", "IPAGothic"],
 ];
 
 /// The fonts that measure like `family` ([`METRIC_TWINS`]), in the order they are tried, without
@@ -859,7 +1004,7 @@ mod tests {
             assert!(pos("Palatino") < pos("Caladea") && pos("TeX Gyre Pagella") < pos("Times New Roman"), "{name}");
         }
         // Other serif families are unchanged.
-        assert_eq!(substitutes("Georgia").first(), Some(&"Caladea"));
+        assert_eq!(substitutes("Garamond").first(), Some(&"Caladea"));
         // Charset aliases are the font itself, so they substitute like it.
         assert_eq!(charset_base_family("Times New Roman Cyr"), "Times New Roman");
         assert_eq!(charset_base_family("Arial CYR"), "Arial");
@@ -1084,10 +1229,10 @@ mod tests {
 
     #[test]
     fn fonts_with_a_clone_have_named_substitutes() {
-        for f in ["Times New Roman", "Times New Roman Cyr", "Arial", "Courier New", "Palatino Linotype", "Symbol"] {
+        for f in ["Times New Roman", "Times New Roman Cyr", "Arial", "Courier New", "Palatino Linotype", "Symbol", "Georgia"] {
             assert!(has_named_substitutes(f), "{f}");
         }
-        for f in ["No Such Brand Font", "Cambria", "Georgia", "Brand Serif"] {
+        for f in ["No Such Brand Font", "Cambria", "Garamond", "Brand Serif"] {
             assert!(!has_named_substitutes(f), "{f}");
         }
     }

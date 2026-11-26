@@ -136,8 +136,9 @@ impl<'a> Builder<'a> {
         }
         let size = rc.draw_size() * if small { 0.8 } else { 1.0 };
         // A symbol font that isn't installed, or is installed one em tall (Apple's Symbol), takes
-        // the height Word gives it.
-        let (a, d) = match wordcraft_fonts::word::symbol_line(&rc.font, &r) {
+        // the height Word gives it; so does a Windows or Office font drawn in a substitute.
+        let line = wordcraft_fonts::word::symbol_line(&rc.font, &r).or_else(|| wordcraft_fonts::word::original_line(&rc.font, &r));
+        let (a, d) = match line {
             Some((a, d)) => (a * face.upem, d * face.upem),
             None => wordcraft_fonts::word::line_metrics(&face),
         };
