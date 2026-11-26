@@ -1,12 +1,12 @@
-use super::boxes::{BoxInput, BoxLayout, Edges, joined, layout_box, push_para};
+use super::boxes::{BoxInput, BoxLayout, Edges, frame_float, joined, layout_box, natural_width, push_para};
 use super::cache::has_page_number_fields;
 use super::ctx::Ctx;
 use super::floats::{
-    FloatAnchor, LateFloats, ObjFrame, ObjectPlacement, anchor_floats, body_wraps, continued_exclusions, fitting, late_floats, place_late,
-    place_objects,
+    FloatAnchor, LateFloats, ObjFrame, ObjectPlacement, anchor_floats, body_wraps, continued_exclusions, fitting, float_rect, late_floats,
+    place_late, place_objects, wrap_area,
 };
 use super::notes::{DECOR_STORY, NoteBox, para_notes};
-use super::page::{PageBuilder, PageFrame, item_bottom};
+use super::page::{PageBuilder, PageFrame, item_bottom, page_frame};
 use super::placed::Placed;
 use super::{
     Arc, Block, Counters, Document, HashMap, InlineObject, Level, LineEnd, Page, ParaLayout, Paragraph, Path, Rect, StoryRef, TextDirection,
@@ -18,6 +18,9 @@ use crate::WRAP_RELAYS;
 /// A closing mark before a continuous section takes no room after content. An otherwise empty
 /// section starting a new page retains its paragraph line.
 pub(crate) fn place_para(ctx: &mut Ctx, pb: &mut PageBuilder, p: &Paragraph, block: usize, body_top: f32) {
+    if place_framed(ctx, pb, p, block, body_top) {
+        return;
+    }
     if !pb.web && ctx.quiet_marks.binary_search(&block).is_ok() {
         let follows_section = block.checked_sub(1).and_then(|i| ctx.doc.body.get(i)).and_then(|b| b.as_para()).is_some_and(|p| p.section.is_some());
         let section = pb.sect_idx;
@@ -69,6 +72,68 @@ pub(crate) fn place_para(ctx: &mut Ctx, pb: &mut PageBuilder, p: &Paragraph, blo
         return;
     }
     place_para_in_flow(ctx, pb, p, block, body_top);
+}
+
+/// A paragraph in a text frame (`w:framePr`; Word 97's positioned paragraphs) is placed apart,
+/// like a floating object: at its position on the page, the text after it wrapping around it,
+/// and it takes no room in the flow. The paragraphs after it with the same frame share it, one
+/// below the other, as wide as the widest of them when the frame has no width. Whether `p` was
+/// placed so (or with the frame's first paragraph).
+pub(crate) fn place_framed(ctx: &mut Ctx, pb: &mut PageBuilder, p: &Paragraph, block: usize, body_top: f32) -> bool {
+    if pb.frame_done.is_some_and(|end| block <= end) {
+        return true;
+    }
+    let framed = |ctx: &Ctx, p: &Paragraph| if p.section.is_some() { None } else { ctx.doc.styles.resolve_para(&p.props).frame };
+    let fr = if pb.web { None } else { framed(ctx, p) };
+    let Some(fr) = fr else { return false };
+    let doc = ctx.doc;
+    let mut group = vec![(block, p)];
+    while group.len() < 512
+        && let Some(next) = doc.body.get(block + group.len()).and_then(|b| b.as_para())
+        && framed(ctx, next).as_ref() == Some(&fr)
+    {
+        group.push((block + group.len(), next));
+    }
+    let col = (pb.col_x(), pb.col_w());
+    let mut laid = Vec::with_capacity(group.len());
+    for &(_, gp) in &group {
+        let label = ctx.next_label(gp);
+        let pl = ctx.para_labelled(gp, col.1, None, &[], label.clone());
+        laid.push((label, pl));
+    }
+    let widest = laid.iter().map(|(_, pl)| natural_width(pl)).fold(1.0f32, f32::max).min(col.1);
+    let fw = fr.w.unwrap_or(widest).clamp(1.0, 1584.0);
+    let mut paras = Vec::with_capacity(group.len());
+    for (&(_, gp), (label, pl)) in group.iter().zip(laid) {
+        paras.push(if (fw - col.1).abs() > 0.01 { ctx.para_labelled(gp, fw, None, &[], label) } else { pl });
+    }
+    let content: f32 = paras.iter().map(|pf| pf.height).sum();
+    let full = match fr.h {
+        Some(h) if fr.h_exact => h,
+        Some(h) => h.max(content),
+        None => content,
+    };
+    let float = frame_float(&fr);
+    let mirror = ctx.mirror;
+    let mut r = float_rect(Some(page_frame(pb, mirror)), col, pb.y, fw, full, &float);
+    // Placed from its paragraph, a frame that would cross the page bottom goes to the next page
+    // with the text after it.
+    if float.v_rel == wordcraft_doc::para::Anchor::Paragraph && r.bottom() > pb.bottom + 0.01 && !pb.fresh() && full <= pb.next_room(body_top) {
+        pb.advance(block, body_top);
+        r = float_rect(Some(page_frame(pb, mirror)), (pb.col_x(), pb.col_w()), pb.y, fw, full, &float);
+    }
+    let mut items = Vec::new();
+    let mut y = r.y;
+    for (&(b, _), pf) in group.iter().zip(&paras) {
+        push_para(&mut items, (StoryRef::Body, &[b as u32]), pf, (0, pf.lines.len()), (r.x, y), fw, Edges::own(pf, 0, pf.lines.len()));
+        y += pf.height;
+    }
+    add_items(pb, Vec::new(), items);
+    if let Some(area) = wrap_area(r, &float, None) {
+        pb.excl.push(area);
+    }
+    pb.frame_done = Some(block + group.len() - 1);
+    true
 }
 
 /// Remove the list label from a mark's lines; optionally keep its other drawing items.
@@ -343,7 +408,10 @@ impl<'a> Flow<'a> {
                 line.end == LineEnd::PageBreak && self.pl.lines.last().is_some_and(|mark| only_markers(self.p, mark.start..mark.stop))
             });
         let height = self.pl.height + rooms.top + if break_mark { 0.0 } else { rooms.bottom };
-        if !(rp.keep_lines || (rp.keep_next && pb.y + height <= pb.bottom + 0.01)) {
+        // A paragraph whose first line ends with a page break (one starting with a break) is not
+        // kept together, nor with the next one: its text is on the next page anyway (Word).
+        let breaks = !pb.web && self.pl.lines.first().is_some_and(|l| l.end == LineEnd::PageBreak);
+        if breaks || !(rp.keep_lines || (rp.keep_next && pb.y + height <= pb.bottom + 0.01)) {
             return before;
         }
         // A paragraph closing a section that the next one starts on a new page keeps with
@@ -463,7 +531,7 @@ impl<'a> Flow<'a> {
             if over && fit.l1 > l0 && !split {
                 break;
             }
-            if over && fit.l1 == l0 && !pb.fresh() && !split && !self.stays_at_bottom(pb, l) {
+            if over && fit.l1 == l0 && !pb.fresh() && !split && !self.stays_at_bottom(ctx, pb, l) {
                 break;
             }
             fit.notes.extend(line_notes);
@@ -482,10 +550,13 @@ impl<'a> Flow<'a> {
     /// page (measured in Word: it stays on a full page instead of starting one of its own).
     /// Measured in Word: a paragraph of only a page break is an ordinary line, and when its mark's
     /// text doesn't fit it goes to the next page, blank page and all.
-    fn stays_at_bottom(&self, pb: &PageBuilder, l: &para::Line) -> bool {
+    fn stays_at_bottom(&self, ctx: &Ctx, pb: &PageBuilder, l: &para::Line) -> bool {
         let p = self.p;
-        let mark_only_after =
-            l.end == LineEnd::PageBreak && self.pl.lines.get(self.l0 + 1..).is_some_and(|rest| rest.iter().all(|m| only_markers(p, m.start..m.stop)));
+        // Before Word 2013's layout (compatibility mode 15) the break line stays too, its mark
+        // going on to the next page (Word for Windows, Word 97-2003 documents).
+        let mark_only_after = l.end == LineEnd::PageBreak
+            && ctx.doc.settings.compat_mode >= 15
+            && self.pl.lines.get(self.l0 + 1..).is_some_and(|rest| rest.iter().all(|m| only_markers(p, m.start..m.stop)));
         let only_break = matches!(l.end, LineEnd::PageBreak | LineEnd::ColumnBreak)
             && !mark_only_after
             && p.text
@@ -1102,6 +1173,20 @@ fn next_first_line(ctx: &mut Ctx, block: usize, width: f32, depth: usize, new_pa
                     Arc::new(para::layout_para(p, &env))
                 }
             };
+            // A paragraph that starts on a new page (page break before) or with a page break keeps
+            // nothing on this page: the paragraph before keeps with no more than the break's own
+            // line, which needs room only when nothing but its mark follows it, from Word 2013's
+            // layout (see `stays_at_bottom`).
+            if pl.rp.page_break_before {
+                return 0.0;
+            }
+            if p.text.starts_with(wordcraft_doc::para::PAGE_BREAK) {
+                let mark_only = pl.lines.get(1..).is_some_and(|rest| rest.iter().all(|m| only_markers(p, m.start..m.stop)));
+                return match pl.lines.first() {
+                    Some(l) if mark_only && ctx.doc.settings.compat_mode >= 15 => pl.rp.space_before.max(0.0) + l.height,
+                    _ => 0.0,
+                };
+            }
             // Its border room, unless it joins the paragraph before (or after) in one box.
             let own = Edges::own(&pl, 0, pl.lines.len());
             let top = if joined(ctx.doc, &ctx.doc.body, block + 1, Some(block), None) { 0.0 } else { own.top };

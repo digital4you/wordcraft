@@ -234,6 +234,7 @@ fn new_page_builder<'p>(
         seeded: 0,
         settle,
         column_lines: None,
+        frame_done: None,
     }
 }
 

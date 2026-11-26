@@ -249,6 +249,29 @@ pub(crate) fn place_table(ctx: &mut Ctx, pb: &mut PageBuilder, t: &wordcraft_doc
     // For the move-on rule, the table's own header rows at the top of a page leave it empty.
     let table_at_top = pb.at_top();
     for (ri, row) in tl.rows.iter().enumerate() {
+        // A page break before the first paragraph of a later row starts that row on a new page
+        // (Word: a heading row in the middle of a table).
+        if ri > 0
+            && ri >= header_rows.len()
+            && t.props.float.is_none()
+            && !pb.at_top()
+            && !pb.web
+            && t.rows
+                .get(ri)
+                .and_then(|r| r.cells.first())
+                .and_then(|c| c.blocks.first())
+                .and_then(|b| b.as_para())
+                .is_some_and(|p| ctx.doc.styles.resolve_para(&p.props).page_break_before)
+        {
+            pb.new_page(block, body_top);
+            ctx.fields.page = pb.number;
+            if ctx.header_repeats.saturating_add(header_cost) <= header_cap {
+                ctx.header_repeats = ctx.header_repeats.saturating_add(header_cost);
+                for h in header_rows.iter().filter_map(|hr| tl.rows.get(*hr)) {
+                    place(pb, h);
+                }
+            }
+        }
         // Word never splits a row of an exact height: it moves on whole.
         let splittable = ri >= header_rows.len()
             && !t

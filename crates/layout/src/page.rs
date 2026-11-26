@@ -93,6 +93,9 @@ pub(crate) struct PageBuilder<'a> {
     /// The lines between the columns of the section on the current page, drawn once its text
     /// there is laid out ([`PageBuilder::close_column_lines`]).
     pub(crate) column_lines: Option<ColumnLines>,
+    /// The last body block of the text frame placed last (see [`crate::flow::place_framed`]):
+    /// the paragraphs up to it were placed with the frame's first one.
+    pub(crate) frame_done: Option<usize>,
 }
 
 /// Where the lines between a section's columns go on a page: the page, the top of the section's

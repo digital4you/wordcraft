@@ -449,7 +449,7 @@ pub(crate) fn layout_box(ctx: &mut Ctx, input: BoxInput<'_>) -> BoxLayout {
 }
 
 /// The width a text frame without one takes: its widest line, with the paragraph's indents.
-fn natural_width(pl: &ParaLayout) -> f32 {
+pub(crate) fn natural_width(pl: &ParaLayout) -> f32 {
     let widest = (0..pl.lines.len())
         .filter_map(|li| {
             let l = pl.lines.get(li)?;
@@ -460,7 +460,7 @@ fn natural_width(pl: &ParaLayout) -> f32 {
 }
 
 /// A text frame's placement as a floating object's (`w:framePr` → anchors, alignment, wrap).
-fn frame_float(fr: &wordcraft_doc::props::TextFrame) -> Float {
+pub(crate) fn frame_float(fr: &wordcraft_doc::props::TextFrame) -> Float {
     let anchor = |a: &str, text: Anchor| match a {
         "page" => Anchor::Page,
         "margin" => Anchor::Margin,
