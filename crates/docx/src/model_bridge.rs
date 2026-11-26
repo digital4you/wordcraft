@@ -210,6 +210,7 @@ pub fn from_shared_model(mut source: craft_wordmodel::Document) -> Result<wordcr
     let mut graphics = GraphicCache::new();
     let mut document = wordcraft_doc::Document::new();
     document.body = blocks_from_shared(body, &mut graphics)?;
+    float_framed_tables(&mut document.body, 0);
     document.last_section = convert(last_section)?;
     document.parts = parts.into_iter().map(|(id, part)| Ok((id, part_value_from_shared(part, &mut graphics)?))).collect::<Result<_, DocxError>>()?;
     document.styles = Arc::new(convert((*styles).clone())?);
@@ -228,6 +229,73 @@ pub fn from_shared_model(mut source: craft_wordmodel::Document) -> Result<wordcr
     document.missing_pictures = missing_pictures_from_shared(missing_pictures)?;
     document.fit_state = fit_state;
     Ok(document)
+}
+
+/// Word 97 positions a table by giving the paragraphs in its cells frame properties
+/// (`sprmPDxaAbs`, `sprmPDyaAbs`, ...); Word 2000 and later show such a table as a floating
+/// table placed by that frame, with the text after it wrapping around it. A table whose every
+/// cell paragraph has the same frame becomes that floating table, its paragraphs unframed.
+fn float_framed_tables(blocks: &mut wordcraft_doc::Blocks, depth: usize) {
+    use wordcraft_doc::para::{Anchor, FloatAlign};
+    if depth > 8 {
+        return;
+    }
+    for b in blocks.iter_mut() {
+        if !matches!(&**b, wordcraft_doc::Block::Table(_)) {
+            continue;
+        }
+        let wordcraft_doc::Block::Table(t) = Arc::make_mut(b) else { continue };
+        for cell in t.rows.iter_mut().flat_map(|r| r.cells.iter_mut()) {
+            float_framed_tables(&mut cell.blocks, depth + 1);
+        }
+        if t.props.float.is_some() {
+            continue;
+        }
+        let mut frame: Option<wordcraft_doc::props::TextFrame> = None;
+        let mut all = true;
+        for p in t.rows.iter().flat_map(|r| r.cells.iter()).flat_map(|c| c.blocks.iter()).filter_map(|b| b.as_para()) {
+            match (&p.props.frame, &frame) {
+                (Some(f), None) => frame = Some(f.clone()),
+                (Some(f), Some(g)) if f == g => {}
+                _ => all = false,
+            }
+        }
+        let Some(f) = frame.filter(|_| all) else { continue };
+        let align = |a: Option<&str>| match a? {
+            "left" | "top" => Some(FloatAlign::Start),
+            "center" => Some(FloatAlign::Center),
+            "right" | "bottom" => Some(FloatAlign::End),
+            "inside" => Some(FloatAlign::Inside),
+            "outside" => Some(FloatAlign::Outside),
+            _ => None,
+        };
+        let (h, v) = (f.h_space.max(0.0), f.v_space.max(0.0));
+        t.props.float = Some(wordcraft_doc::props::TableFloat {
+            h_rel: match f.h_anchor.as_str() {
+                "page" => Anchor::Page,
+                "margin" => Anchor::Margin,
+                _ => Anchor::Column,
+            },
+            v_rel: match f.v_anchor.as_str() {
+                "page" => Anchor::Page,
+                "margin" => Anchor::Margin,
+                _ => Anchor::Paragraph,
+            },
+            x: finite(f.x),
+            y: finite(f.y),
+            h_align: align(f.x_align.as_deref()),
+            v_align: align(f.y_align.as_deref()),
+            dist: [h, v, h, v],
+            overlap: true,
+        });
+        for cell in t.rows.iter_mut().flat_map(|r| r.cells.iter_mut()) {
+            for pb in cell.blocks.iter_mut() {
+                if let wordcraft_doc::Block::Para(p) = Arc::make_mut(pb) {
+                    p.props.frame = None;
+                }
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
