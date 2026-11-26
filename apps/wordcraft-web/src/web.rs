@@ -14,6 +14,7 @@ const DOC_EXTS: &[&str] =
 const IMAGE_EXTS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "bmp", "wmf", "emf"];
 const RECIPIENT_EXTS: &[&str] = wordcraft_engine::cmd::mailings::RECIPIENT_EXTENSIONS;
 mod font_store;
+mod spelling;
 const CANVAS_ID: &str = "wordcraft_canvas";
 const LOADING_ID: &str = "wordcraft_loading";
 
@@ -34,6 +35,14 @@ pub fn start() {
         // in instead: it runs WordCraft in its own document and talks over DOM `CustomEvent`s
         // on the canvas (`host`). The host guards leaving the page, so this one doesn't.
         let bridge = crate::host::Bridge::detect(&canvas);
+        if let Some(host) = &bridge
+            && query_param("proofingPack").as_deref() == Some("de-CH")
+            && let Err(error) = spelling::load().await
+        {
+            log::error!("Swiss spelling pack: {error}");
+            host.post_failed("Could not load the Swiss German spelling pack.");
+            return;
+        }
         let app_bridge = bridge.clone();
         let dirty = Rc::new(Cell::new(false));
         let saves = AsyncSaves::default();

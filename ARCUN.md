@@ -8,6 +8,11 @@ the built files (`index.html`, the JavaScript, the WebAssembly module, `snippets
 
 ## Changes
 
+- **`?proofingPack=de-CH`**: hosted editors load the separate Swiss German Hunspell files
+  from the release. Proofing follows the document language. About › Language data includes
+  the source, authors and both GPL texts. The files are pinned by craft-i18n and packaged
+  unmodified by `packaging/web/package-de-ch.py`.
+
 - **`?chrome=notitlebar`**: a host page that shows the document's title and handles its files
   itself hides the title bar (AutoSave, title, search, account). Save, Undo and Redo move to the
   start of the tab strip; the menu that customizes them is left out. Only with a host bridge, only

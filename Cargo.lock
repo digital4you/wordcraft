@@ -1104,7 +1104,7 @@ dependencies = [
 [[package]]
 name = "craft-proof"
 version = "0.1.0"
-source = "git+https://github.com/storytold/craft-libs?rev=01315d9c92b5b0e69082d35ca56099461a1efd45#01315d9c92b5b0e69082d35ca56099461a1efd45"
+source = "git+https://github.com/digital4you/craft-libs?rev=aee6c7fa0b0de1bb2df3c63b2a98b1ea9721f38a#aee6c7fa0b0de1bb2df3c63b2a98b1ea9721f38a"
 dependencies = [
  "log",
  "miniz_oxide 0.9.1",
@@ -7116,6 +7116,7 @@ dependencies = [
 name = "wordcraft-web"
 version = "0.18.1"
 dependencies = [
+ "craft-proof",
  "craft-web-api",
  "craft-web-host",
  "eframe",

@@ -64,6 +64,7 @@ jobs:
           mv "wordcraft-web-${base}" "$name"
           rm -rf "$name"/index.html "$name"/wordcraft-web-*.js "$name"/wordcraft-web-*_bg.wasm "$name"/snippets
           cp -R wordcraft/dist/web/index.html wordcraft/dist/web/wordcraft-web-*.js wordcraft/dist/web/wordcraft-web-*_bg.wasm wordcraft/dist/web/snippets "$name"/
+          python3 wordcraft/packaging/web/package-de-ch.py craft-i18n/language-data/manifest.toml "$name"
           cp wordcraft/ARCUN.md "$name"/ARCUN.md
           zip -q -r -X "$name.zip" "$name"
           sha256sum "$name.zip" | tee "$name.zip.sha256"
