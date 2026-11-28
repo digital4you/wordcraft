@@ -590,23 +590,17 @@ fn title_and_account_buttons_work() {
     assert!(h.query_by_label("User name:").is_some());
 }
 
-/// The Options toggle hides the community pill in the title bar; the backstage menu's
-/// Discord link hides with it — one setting, everywhere the link shows.
+/// Arcun's build has no community link: the backstage menu shows only About, whatever the
+/// stored `show_discord` preference says.
 #[test]
-fn the_community_button_off_hides_the_backstage_discord_link_too() {
+fn the_backstage_menu_has_no_community_link() {
     use egui_kittest::kittest::Queryable;
     let mut a = app();
+    a.ui.show_discord = true;
     a.run("ui.backstage", json!({"value": true})).unwrap();
     let mut h = harness(a);
     h.run_steps(2);
-    assert!(h.query_by_label("Discord community").is_some(), "the community link shows by default");
-
-    let mut a = app();
-    a.ui.show_discord = false;
-    a.run("ui.backstage", json!({"value": true})).unwrap();
-    let mut h = harness(a);
-    h.run_steps(2);
-    assert!(h.query_by_label("Discord community").is_none(), "the backstage link honors the same setting");
+    assert!(h.query_by_label("Discord community").is_none(), "no community link in the backstage menu");
 }
 
 /// File › Options › Advanced › Editing: alignment guides are a UI command, on by default and
@@ -760,7 +754,7 @@ fn start_screen_shows_file_home_and_esc_leaves_no_document() {
     for id in ["format.bold", "text.insert", "file.save", "file.saveAs", "file.print", "edit.paste", "insert.table", "ui.print"] {
         assert!(!widgets::enabled(a, id), "{id} is off with no document");
     }
-    for id in ["file.new", "file.open", "ui.backstage", "ui.tab", "ui.discord", "file.options", "ui.theme", "ui.statusCount"] {
+    for id in ["file.new", "file.open", "ui.backstage", "ui.tab", "file.options", "ui.theme", "ui.statusCount"] {
         assert!(widgets::enabled(a, id), "{id} works with no document");
     }
     assert!(!chrome::qat_enabled(a, "file.save"));
