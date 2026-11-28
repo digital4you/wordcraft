@@ -29,8 +29,8 @@ the built files (`index.html`, the JavaScript, the WebAssembly module, `snippets
   the copyright line, without the ArtCraft line and the getartcraft.com and Discord links. The Discord
   button in the title bar, File › *Discord community*, Help › *Community Discord*, the option that showed
   the button and the command `ui.discord` are gone. The sample document links to example.com, a LaTeX export
-  says only *Written by WordCraft*. The logo files in `docs/brand/` are removed and the README is this
-  branch's own. The copyright lines, `NOTICE` and the licence texts stay.
+  says only *Written by WordCraft*. The logo files in `docs/brand/` are removed, and the README, also the one in the release
+  archive, is this branch's own. The copyright lines, `NOTICE` and the licence texts stay.
 
 GridCraft has the same title bar parameter (storytold/wordcraft#4945 asks for it in WordCraft). The
 changes are meant to be offered upstream; once upstream has them, this branch is no longer needed.

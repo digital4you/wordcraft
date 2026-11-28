@@ -66,6 +66,8 @@ jobs:
           cp -R wordcraft/dist/web/index.html wordcraft/dist/web/wordcraft-web-*.js wordcraft/dist/web/wordcraft-web-*_bg.wasm wordcraft/dist/web/snippets "$name"/
           python3 wordcraft/packaging/web/package-de-ch.py craft-i18n/language-data/manifest.toml "$name"
           cp wordcraft/ARCUN.md "$name"/ARCUN.md
+          # Upstream's README presents the ArtCraft brand; this modified build ships the branch's own.
+          cp wordcraft/README.md "$name"/README.md
           zip -q -r -X "$name.zip" "$name"
           sha256sum "$name.zip" | tee "$name.zip.sha256"
           echo "ASSET=$name.zip" >> "$GITHUB_ENV"
